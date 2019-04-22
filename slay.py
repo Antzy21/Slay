@@ -1,4 +1,6 @@
 import pygame
+from Player import Player
+from Tile import Tile
 import numpy as np
 import random
 import time
@@ -7,138 +9,67 @@ pygame.init()
 
 clock = pygame.time.Clock()
 
-white = (255, 255, 255)
-blue = (0, 0, 255)
-red = (255, 0, 0)
-cyan = (0, 255, 255)
-green = (0, 255, 0)
-yellow = (255, 255, 0)
-purple = (255, 0, 255)
-colors = [blue, green, red, cyan, purple]
+number_of_players = 4
+size = 50
+gridX = 10
+gridY = 10
 
-Dy = np.sin(np.pi/3)
-Dx = np.cos(np.pi/3)
-
-dimensions = 500
-displaySize = (dimensions, dimensions)
+d_x = int(((2-np.cos(np.pi/3))*gridX+np.cos(np.pi/3))*size)
+d_y = int(((2*np.sin(np.pi/3))*gridY+1)*size)
+displaySize = (d_x, d_y)
 gameDisplay = pygame.display.set_mode(displaySize)
 
-class Position:
-    def __init__(self, x, y, i, j, player):
-        self.x = x
-        self.y = y
-        self.i = i
-        self.j = j
-        self.player = player
-        self.color = colors[player]
-    contains = None
-
-class Province:
-    tiles = []
-    money = 0
-
-    def add(self, tile):
-        self.tiles.append(tile)
-    def combine(self,prov2):
-        self.tiles.extend(prov2.tiles)
-        self.money += prov2.money
-        del prov2
-
-class Kingdom:
-    provinces = []
-
-class Tree:
-    def __init__(self, pos):
-        self.position = pos
-
-    def display(self):
-        pygame.draw.rect(gameDisplay, white, (self.position.x, self.position.y, 10, 30))
-
-def make_hex(x, y, size=40, color=green):
-    dy = Dy*size
-    dx = Dx*size
-    points = [(x-size, y),
-              (x-dx, y+dy),
-              (x+dx, y+dy),
-              (x+size, y),
-              (x+dx, y-dy),
-              (x-dx, y-dy)]
-    pygame.draw.polygon(gameDisplay, color, points)
-    pygame.draw.polygon(gameDisplay, white, points, 3)
-
-def message_display(text='"insert text"', text_size=20, position=(dimensions/2, dimensions/2), colour=white):
-    large_text = pygame.font.Font('freesansbold.ttf', text_size)
-    text_surface = large_text.render(text, True, colour)
-    text_rect = text_surface.get_rect()
-    text_rect.center = position
-    gameDisplay.blit(text_surface, text_rect)
-
-def make_hex_with_text(x, y, text, color, size=40):
-    make_hex(x, y, size, color)
-    message_display(text, position=(x, y))
-
-def display(grid):
+def update_display(gameDisplay, grid, mouse_pos):
     for row in grid:
-        for hex in row:
-            make_hex_with_text(hex.x, hex.y, str(hex.i)+str(hex.j), hex.color)
-            pygame.display.update()
+        for tile in row:
+            tile.is_moused_over(mouse_pos, grid)
+    pygame.display.update()
 
 def game():
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                quit()
-        clock.tick(60)
-        pygame.display.update()
+        mouse_pos = pygame.mouse.get_pos()
+        clock.tick(30)
+        update_display(gameDisplay, grid, mouse_pos)                      
 
-def setup(seed, testSize=40):
+def setup(seed, number_of_players, testSize=40):
+    players = []
+    for n in range(number_of_players):
+        players.append(Player(n))
     if seed is None:
         grid = []
     else:
         grid = []
-    for i in range(0, gridX-1):
+    for i in range(0, gridX):
         grid.append([])
-        for j in range(0, gridY-1):
-            player = random.randint(0,4)
-            x = testSize * (i * 2 * Dy * Dy + 1)
-            y = testSize * (j * 2 * Dy + 1)
-            s = testSize * Dy
-            if i % 2 == 0:
-                grid[i].append(Position(x, y, i, j, player))
-            else:
-                grid[i].append(Position(x, y+s, i, j, player))
+        for j in range(0, gridY):
+            player = players[random.randint(0,number_of_players-1)] 
+            grid[i].append(Tile(gameDisplay, i, j, testSize, player))
+            pygame.display.update()
+            surroundings = grid[i][j].surroundings(grid)
+            for neighbour in surroundings:
+                if neighbour == None:
+                    pass
+                elif neighbour.player.number == grid[i][j].player.number:
+                    if grid[i][j].province == None and neighbour.province == None:
+                        player.new_province(grid[i][j],neighbour)
+                    elif neighbour.province != None:
+                        neighbour.province.evaluate_new_tile(grid[i][j])
+                    elif grid[i][j].province != None:
+                        grid[i][j].province.evaluate_new_tile(neighbour)
+    for player in players:
+        for province in player.provinces:
+            province.money = province.size
+            province.capital.capital_refresh(grid)
+
+
+
+
+
     return grid
 
-def findProvinces(grid):
-    for row in grid:
-        for hex in row:
-            print(hex.color)
-            for sur in surroundings(grid, hex):
-                if sur.color == hex.color:
-                    '''They need connecting'''
-
-def surroundings(grid, hex):
-    surroundings = []
-    if hex.j > 0: # Above
-        surroundings.append(grid[hex.i - 1][hex.j])
-    if hex.i%2==1 or hex.j != 0:
-        if hex.i > 0: # Top left
-            surroundings.append(grid[hex.i - 1][hex.j-1])
-        if hex.i < gridX:  # Top right
-            surroundings.append(grid[hex.i + 1][hex.j])
-    if hex.i%2==0 or hex.j != gridY:
-        if hex.i > 0: # Bottom left
-            surroundings.append(grid[hex.i - 1][hex.j+1])
-        if hex.i < gridX:  # Bottom right
-            surroundings.append(grid[hex.i + 1][hex.j])
-    if hex.i < gridX-1: # Below
-        surroundings.append(grid[hex.i - 1][hex.j])
-    return surroundings
-
-gridX = 6
-gridY = 7
-grid = setup(seed = None)
-display(grid)
+grid = setup(None, number_of_players, size)
 # findProvinces(grid)
 game()
